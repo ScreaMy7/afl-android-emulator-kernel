@@ -1,0 +1,40 @@
+# Linux cross-build environment for the on-device AFL++ binaries
+# (afl-fuzz + afl-frida-trace.so + libdislocator.so, Android arm64).
+#
+# Why a container: AFL++ frida-mode's GNUmakefile hardcodes an Apple target when
+# it runs on a macOS host, so afl-frida-trace.so cannot be cross-compiled on a
+# Mac. This amd64 Linux image builds it the upstream way (TARGET_CC=<ndk-clang>,
+# ARCH=arm64). On Apple Silicon it runs under emulation, same as the kernel image.
+#
+# The NDK is deliberately NOT pinned here: container/build-afl.sh supplies it
+# from the environment at run time — either a Linux NDK mounted at /ndk, or (when
+# the host NDK is macOS-only) the matching version fetched by sdkmanager.
+FROM --platform=linux/amd64 ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git curl wget ca-certificates xz-utils unzip zip file \
+      build-essential clang lld python3 \
+      openjdk-17-jdk-headless && \
+    rm -rf /var/lib/apt/lists/*
+
+# Android command-line tools — used only as a fallback to fetch a Linux NDK of a
+# version taken from the environment (never a pinned version baked into the image).
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+RUN mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools" && cd /tmp && \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O c.zip && \
+    unzip -q c.zip -d "$ANDROID_SDK_ROOT/cmdline-tools" && \
+    mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest" && \
+    rm c.zip
+ENV PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+
+# Bake the build script into the image. Colima does not bind-mount external
+# volumes (e.g. /Volumes/*), so a `-v repo/container:/scripts` mount would be
+# empty; COPY ships it via the build context instead.
+COPY container/build-afl.sh /opt/build-afl.sh
+RUN chmod +x /opt/build-afl.sh
+
+WORKDIR /afl

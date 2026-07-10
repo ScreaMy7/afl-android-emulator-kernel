@@ -93,13 +93,43 @@ Summary:
 | `CONFIG_VIRTIO_* = y` | virtio drivers built-in, independent of module load order |
 | `# CONFIG_HW_RANDOM is not set` | broken virtio-rng probe hangs boot on 5.4.302 |
 
+## AFL++ binaries (the other native-track prerequisite)
+
+The custom kernel is one half of what on-device fuzzing needs; the other is the
+AFL++ binaries built **for the device** (`afl-fuzz`, `afl-frida-trace.so`,
+`libdislocator.so`, Android arm64). Those can't be built on a macOS host —
+AFL++ frida-mode's makefile hardcodes an Apple target there — so `build-afl.sh`
+cross-builds them in the same Linux-container approach used for the kernel.
+
+```sh
+export FUZZING_NDK=/path/to/Android/sdk/ndk/<version>   # taken from env, not pinned
+./build-afl.sh
+```
+
+It builds the AFL image (`Dockerfile.afl`), then in the container clones
+AFLplusplus, resolves an NDK (the mounted one if it's a Linux NDK, else it
+fetches the same version), and builds **unpatched** — the SysVIPC kernel above
+removes the need for the memfd patch, and building against upstream's own frida
+devkit avoids the Frida 16-vs-17 API clash. Binaries are staged straight into
+`$FUZZING_AFL_ARM64` (default `~/.local/share/aflpp-arm64`) in the layout the
+fuzzing-engine expects, so `source env.sh` in that repo picks them up and Gate 0
+`patched_afl` passes with no extra config.
+
+> Reproducibility: pin an AFLplusplus commit with `AFL_REF=<sha>`. Targeting a
+> stock (non-SysVIPC) or Android-12+ device instead? Those still need the memfd /
+> ashmem patch — apply it separately; the default build here is for this repo's
+> API-30 SysVIPC AVD.
+
 ## Layout
 
 ```
-Dockerfile                              toolchain image
-build.sh                                host: build orchestrator
+Dockerfile                              kernel toolchain image
+Dockerfile.afl                          AFL cross-build image (NDK unpinned, from env)
+build.sh                                host: build the SysVIPC kernel
+build-afl.sh                            host: cross-build on-device AFL++ -> $FUZZING_AFL_ARM64
 boot.sh                                 host: boot an AVD with the custom kernel
-container/sync-and-build.sh             in-container: sync + patch + build
+container/sync-and-build.sh             in-container: sync + patch + build kernel
+container/build-afl.sh                  in-container: cross-build afl-fuzz + afl-frida-trace.so
 container/repack-ramdisk.sh             in-container: rebuild ramdisk w/ modules
 config/goldfish_defconfig.fragment      the documented config delta
 docs/GOTCHAS.md                         non-obvious build pitfalls
