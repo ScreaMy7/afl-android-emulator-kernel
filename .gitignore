@@ -1,0 +1,16 @@
+# Build outputs
+out/
+kernel-src/
+
+# Prebuilt binaries -> published as GitHub Release assets, not committed
+prebuilt/*.img
+prebuilt/Image-*
+prebuilt/modules/
+prebuilt/*.tar
+prebuilt/*.tar.*
+
+# Logs
+*.log
+
+# macOS
+.DS_Store

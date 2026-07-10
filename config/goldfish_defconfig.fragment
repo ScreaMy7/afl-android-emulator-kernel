@@ -1,0 +1,35 @@
+# Config fragment appended to
+#   common-modules/virtual-device/goldfish_defconfig.fragment
+# by container/sync-and-build.sh. Reproduced here for review without a build.
+#
+# This is the entire "custom flags" delta vs. the stock goldfish kernel.
+
+# System V IPC: AFL++'s default shmget-based coverage bitmap needs this.
+# Stock goldfish kernels ship CONFIG_SYSVIPC=n, which breaks the AFL forkserver
+# handshake ("Fork server handshake failed"). This single flag is the whole
+# reason a custom kernel is required for fuzzing on the emulator.
+CONFIG_SYSVIPC=y
+CONFIG_SYSVIPC_SYSCTL=y
+CONFIG_POSIX_MQUEUE=y
+
+# Host glibc multiarch include paths don't resolve under AOSP Clang -> disable.
+# CONFIG_UAPI_HEADER_TEST is not set
+
+# Build virtio drivers in-kernel so first-stage init doesn't depend on module
+# load order.
+CONFIG_VIRTIO=y
+CONFIG_VIRTIO_MMIO=y
+CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_PCI_LEGACY=y
+CONFIG_VIRTIO_BLK=y
+CONFIG_VIRTIO_NET=y
+CONFIG_VIRTIO_CONSOLE=y
+CONFIG_VIRTIO_INPUT=y
+CONFIG_VIRTIO_PMEM=y
+
+# virtio-rng probe is broken in 5.4.302 on this QEMU virt board and leaves
+# /dev/hw_random half-initialized, hanging init's MixHwrngIntoLinuxRng. With
+# HW_RANDOM=n the device node is never created and init treats ENOENT as a no-op.
+# CONFIG_HW_RANDOM is not set
+# CONFIG_HW_RANDOM_VIRTIO is not set
+# CONFIG_HW_RANDOM_HISI is not set
