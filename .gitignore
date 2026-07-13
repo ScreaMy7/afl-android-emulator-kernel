@@ -12,5 +12,9 @@ prebuilt/*.tar.*
 # Logs
 *.log
 
+# Stray runtime artifacts (mitmproxy capture DB, etc.)
+mitm_mcp_traffic.db
+*.db
+
 # macOS
 .DS_Store
