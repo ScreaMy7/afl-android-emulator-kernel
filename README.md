@@ -80,6 +80,24 @@ adb shell 'zcat /proc/config.gz' | grep -E 'CONFIG_SYSVIPC|CONFIG_HW_RANDOM'
 A working AFL++ forkserver on this kernel is the real acceptance test: point an
 arm64 AFL++ frida-mode build at any target and confirm the handshake completes.
 
+### SELinux: why `boot.sh` defaults to permissive
+
+The kernel gives you the `shmget` **syscall**, but that's only half the story: a
+stock **enforcing** policy still denies SysV shared memory to the `shell` domain
+(`u:r:shell:s0`), so `afl-fuzz` run over `adb shell` dies with
+`shmget() failed ... Permission denied` — even on this kernel — unless it runs as
+root. You can see the denial with `adb shell 'getenforce'` (Enforcing) and an
+`avc: denied ... tclass=shm scontext=u:r:shell:s0` in `logcat`.
+
+`boot.sh` therefore boots the emulator **`-selinux permissive`** by default, so
+an unprivileged shell can run AFL directly — no `adb root` per campaign. Verified:
+under permissive, non-root `shell` dumb-mode discovery on FuzzLab found 146 crashes
+in 45 s; the same run under enforcing shell yields 0 (silent `shmget` failure).
+
+Alternatives if you need enforcing (`SELINUX=enforcing ./boot.sh`):
+`adb root` before fuzzing, or use a **memfd-patched** AFL (`memfd_create` sidesteps
+the SysV-shm SELinux class entirely — see the fuzzing skill's `AndroidMemfdAflBuild.md`).
+
 ## Config delta
 
 The complete set of flags flipped vs. stock is in
